@@ -160,4 +160,54 @@
     Promise.prototype.isResolved = PromiseIsResolved;
 
 
+    /**
+     * 並列実行の待ち合わせ
+     * @param [nMixed]
+     * @return {parallelPromise}
+     */
+    function PromiseParallel(nMixed) {
+        var parallelPromise = new Promise(), i = 0, iz = arguments.length, arg,
+            p = 0, passArg = new Array(iz);
+
+        // parallelでは，引数を先頭1つのみ受け取って待ち合わせる
+        function _junction(result) {
+            passArg[p] = result;
+            if (++p === iz) {
+                parallelPromise.resolve.apply(parallelPromise, passArg);
+            }
+        }
+
+        for (; i<iz; i++) {
+            arg = arguments[i];
+            if (_constructor(arg) === 'Function') {
+                arg = arg();
+            }
+            if (arg instanceof Promise) {
+                // resolve, rejectの両方に登録
+                arg.then(_junction, _junction);
+            } else {
+                _junction(arg);
+            }
+        }
+        return parallelPromise;
+    }
+
+    /**
+     * コンストラクタ調査
+     * @param mixed
+     * @return {String}
+     */
+    function _constructor(mixed) {
+        if (mixed == null) {
+            return mixed === null ? 'Null' : 'Undefined';
+        }
+        var base = mixed.constructor;
+        return Object.prototype.toString.call(mixed) === '[object Function]'
+               ? ( 'name' in base ? base.name : (''+base).replace(/^\s*function\s*([^\(]*)[\S\s]+$/im, '$1'))
+               : base;
+    }
+
+    // utilities
+    root.Stay.parallel = PromiseParallel;
+
 })(window || this); // window or global
