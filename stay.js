@@ -41,7 +41,15 @@
      * @param {Function} resolvedHandler
      */
     function PromiseDone(resolvedHandler) {
-        this.then(resolvedHandler);
+        var tail = this.handlers.slice(-1)[0];
+        // 直近のハンドラにresolvedが未登録なら再追加
+        if (tail && !tail.resolved) {
+            tail.resolved = resolvedHandler;
+            this.handlers.pop();
+            this.handlers.push(tail);
+        } else {
+            this.then(resolvedHandler);
+        }
     }
 
     /**
@@ -49,7 +57,15 @@
      * @param {Function} rejectedHandler
      */
     function PromiseFail(rejectedHandler) {
-        this.then(void 0, rejectedHandler);
+        var tail = this.handlers.slice(-1)[0];
+        // 直近のハンドラにrejectedが未登録なら再追加
+        if (tail && !tail.rejected) {
+            tail.rejected = rejectedHandler;
+            this.handlers.pop();
+            this.handlers.push(tail);
+        } else {
+            this.then(void 0, rejectedHandler);
+        }
     }
 
     /**
@@ -77,37 +93,21 @@
     }
 
     /**
-     * oldPromiseからnewPromise(this)にハンドラを引き継ぎ
-     * @param oldPromise
-     * @return {void}
-     */
-    function PromiseRelay(oldPromise) {
-        this.handlers = oldPromise.handlers;
-        oldPromise.handlers = [];
-
-        // もしnewPromiseがすぐに解決済みのオブジェクトになっていたら
-        // 解決済みステートで，relayしたハンドラをすぐにcallする
-        if (!!this.resolved) {
-            this.call(this.resolved);
-        }
-    }
-
-    /**
      * ハンドラの呼び出し
      * @param {String} state
      * @param {Arguments} args
      * @return {void}
      */
     function PromiseCall(state, args) {
-        var handlers = this.handlers, handler, rv, i = 0, iz = handlers.length;
+        var handlers = this.handlers, handler, rv;
 
         if ('progress' === state) {
-            (handler = handlers[0].progress) && handler.apply(this, args);
+           handlers[0] && (handler = handlers[0].progress) && handler.apply(this, args);
         } else {
             // 解決時のステートを保存
             this.resolved = state;
-            for (; i<iz; i++) {
-                handler = handlers.splice(0, 1)[0][state];
+            while (handler = handlers.splice(0, 1)[0]) {
+                handler = handler[state];
                 rv = handler ? handler.apply(this, args) : rv;
 
                 // Promiseが得られたら，残りのハンドラを渡してリレーする
@@ -119,15 +119,45 @@
         }
     }
 
+    /**
+     * oldPromiseからnewPromise(this)にハンドラを引き継ぎ
+     * @param oldPromise
+     * @return {void}
+     */
+    function PromiseRelay(oldPromise) {
+        this.handlers = oldPromise.handlers;
+        oldPromise.handlers = [];
+
+        // もしnewPromiseがすぐに解決済みのオブジェクトになっていたら
+        // 解決時ステートで，relayしたハンドラをすぐにcallする
+        if (!!this.isResolved) {
+            this.call(this.resolved);
+        }
+    }
+
+    /**
+     * 解決済みかどうかを返す
+     * @return {Boolean}
+     */
+    function PromiseIsResolved() {
+        return !!this.resolved();
+    }
+
+    // define
+    root.Stay = Promise;
+
+    // prototypes
+    Promise.prototype.then     = PromiseThen;
     Promise.prototype.done     = PromiseDone;
     Promise.prototype.fail     = PromiseFail;
-    Promise.prototype.then     = PromiseThen;
+
     Promise.prototype.resolve  = PromiseResolve;
     Promise.prototype.reject   = PromiseReject;
     Promise.prototype.progress = PromiseProgress;
-    Promise.prototype.relay    = PromiseRelay;
     Promise.prototype.call     = PromiseCall;
+    Promise.prototype.relay    = PromiseRelay;
 
-    root.Stay = Promise;
+    Promise.prototype.isResolved = PromiseIsResolved;
+
 
 })(window || this); // window or global
